@@ -1,0 +1,33 @@
+# ===== 敏感信息（绝不提交，见 SECRET.md）=====
+secrets/
+.env
+.env.*
+*.pem
+*.key
+*credentials*
+*token*.json
+*token*.txt
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ===== 任务数据（含客户文字稿与图片，不入库）=====
+workspace/*
+!workspace/.gitkeep
+
+# ===== 编辑器/系统 =====
+.idea/
+.vscode/
+*.swp
+.DS_Store
