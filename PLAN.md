@@ -28,7 +28,7 @@
 - [x] 目录结构、pyproject.toml、.gitignore
 - [x] AGENTS.md / README.md / SECRET.md / requirements.md
 
-### M1 对话主管 chat/（supervisor，先建）
+### M1 对话主管 chat/（supervisor，先建）✅（已完成）
 - [x] LLM 适配层：统一 `chat(messages) -> str` 接口；凭据读 `secrets/config.env`；**必须可 mock**（离线/CI 无 Key 也能跑测试）
 - [x] Agent 循环：LLM 决定"说话 or 调工具"，工具结果回灌，直到回合结束
 - [x] 工具注册表：每个工具 = 名称 + 入参 schema + 桩实现（返回"功能未实现，已记录"）；后续里程碑只替换桩
@@ -102,3 +102,4 @@
 | --- | --- | --- |
 | 2026-08-30 | M0 | 脚手架 + 三份规范文档 |
 | 2026-08-30 | PLAN 重排 | 按用户决定改为"先建主管后写工具"，M1=chat 主管，工具挂桩 |
+| 2026-08-30 | M1 | chat/ 主管完成：[OI] 兼容 LLM 适配层（可 mock）、Agent 循环（CALL/SPEAK 协议）、8 工具注册表（7 桩）、6 阶段状态机、TUI；pytest 24 passed / ruff clean |
