@@ -62,39 +62,15 @@ def run_tui(llm: LLMClient | None = None, inbox: Path | None = None) -> None:
                     # 开始新项目：登记任务号（本地生成，不调 LLM）
                     session.data["task_id"] = _new_task_id()
                     workflow.advance(Stage.COLLECT_TEMPLATE)
-                    print(f"助手：{guide.begin_stage(workflow.stage, workflow)}")
+                    print(f"助手：{guide.begin_stage(workflow.stage)}")
                 else:
-                    done, msg = guide.confirm(workflow)
+                    done, msg = guide.confirm()
                     print(f"助手：{msg}")
                     if done:
-                        archived = _archive(inbox, session, workflow, guide)
-                        print(f"（材料已存到 {archived}）")
-                        nxt = _next_stage(workflow.stage)
-                        workflow.advance(nxt)
-                        opening = guide.begin_stage(workflow.stage, workflow)
-                        if opening:
-                            print(f"助手：{opening}")
-                        else:
-                            guided = False
-                            # 材料全齐：现在才让 LLM 上场检查、开工
-                            print("（接下来：材料收齐，AI 开始检查处理，请稍候……）")
-                            print("（AI 正在思考……）")
-                            print(f"助手：{agent.handle(_kickoff_msg(session))}")
+                        guided = _finish_stage(inbox, session, workflow, guide, agent)
             elif text.lower() in _NONE:
-                done = guide.skip_optional()
-                if done:
-                    archived = _archive(inbox, session, workflow, guide)
-                    print(f"（材料已存到 {archived}）")
-                    print("（接下来：材料收齐，AI 开始检查处理，请稍候……）")
-                    nxt = _next_stage(workflow.stage)
-                    workflow.advance(nxt)
-                    opening = guide.begin_stage(workflow.stage, workflow)
-                    if opening:
-                        print(f"助手：{opening}")
-                    else:
-                        guided = False
-                        print("（AI 正在思考……）")
-                        print(f"助手：{agent.handle(_kickoff_msg(session))}")
+                if guide.skip_optional():
+                    guided = _finish_stage(inbox, session, workflow, guide, agent)
                 else:
                     print(f"助手：好的，不着急。{guide.next_prompt()}")
             else:
@@ -104,6 +80,24 @@ def run_tui(llm: LLMClient | None = None, inbox: Path | None = None) -> None:
         # ---- 普通模式：交给 LLM 主管 ----
         print("（AI 正在思考……）")
         print(f"助手：{agent.handle(text)}")
+
+
+def _finish_stage(inbox: Path, session: Session, workflow: WorkflowState,
+                  guide: Guide, agent: Agent) -> bool:
+    """本阶段材料收齐：归档、推进状态机；无下一阶段可引导则交棒 LLM。
+    返回是否仍处于固定引导模式。"""
+    archived = _archive(inbox, session, guide)
+    print(f"（材料已存到 {archived}）")
+    workflow.advance(_next_stage(workflow.stage))
+    opening = guide.begin_stage(workflow.stage)
+    if opening:
+        print(f"助手：{opening}")
+        return True
+    # 材料全齐：现在才让 LLM 上场检查、开工
+    print("（接下来：材料收齐，AI 开始检查处理，请稍候……）")
+    print("（AI 正在思考……）")
+    print(f"助手：{agent.handle(_kickoff_msg(session))}")
+    return False
 
 
 def _kickoff_msg(session: Session) -> str:
@@ -122,7 +116,7 @@ def _new_task_id() -> str:
     return f"{datetime.now(tz=UTC).date():%Y%m%d}_{int(time.time()) % 10000}"
 
 
-def _archive(inbox: Path, session: Session, workflow: WorkflowState, guide: Guide) -> Path:
+def _archive(inbox: Path, session: Session, guide: Guide) -> Path:
     """把已收讫的文件从 inbox 按 类别/阶段 归档到
     workspace/<task_id>/input/<template|draft|images>/，返回归档根目录。
 

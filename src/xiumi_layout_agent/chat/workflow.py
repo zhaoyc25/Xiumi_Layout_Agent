@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, unique
 
 
@@ -39,7 +39,6 @@ _STAGE_HINT = {
 class WorkflowState:
     stage: Stage = Stage.IDLE
     task_id: str = ""
-    history: list[Stage] = field(default_factory=list)
 
     def advance(self, to: Stage) -> None:
         if to not in _LEGAL[self.stage]:
@@ -47,7 +46,6 @@ class WorkflowState:
                 f"当前阶段是「{self.stage.value}」，还不能跳到「{to.value}」。"
                 f"提示：{_STAGE_HINT[self.stage]}"
             )
-        self.history.append(self.stage)
         self.stage = to
 
     def can_go(self, to: Stage) -> bool:

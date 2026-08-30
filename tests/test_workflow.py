@@ -28,4 +28,3 @@ def test_delivered_can_reopen():
     assert ws.can_go(Stage.IDLE)
     ws.advance(Stage.IDLE)
     assert ws.stage is Stage.IDLE
-    assert len(ws.history) == 6

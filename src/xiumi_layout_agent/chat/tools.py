@@ -36,20 +36,6 @@ class ToolRegistry:
     def names(self) -> list[str]:
         return sorted(self._tools)
 
-    def specs(self) -> list[dict[str, Any]]:
-        """给 LLM 看的工具清单。"""
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": t.name,
-                    "description": t.description,
-                    "parameters": t.params_schema,
-                },
-            }
-            for t in (self._tools[n] for n in self.names())
-        ]
-
 
 @dataclass
 class Session:

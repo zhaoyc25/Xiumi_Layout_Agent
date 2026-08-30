@@ -45,13 +45,12 @@ class Guide:
         self.inbox = inbox
         self.state = GuideState()
 
-    def begin_stage(self, stage: Stage, workflow: WorkflowState | None = None) -> str:
+    def begin_stage(self, stage: Stage) -> str:
         items = _STAGE_ITEMS.get(stage)
         if not items:
             self.state = GuideState()
             return ""
         self.state = GuideState(needed=[k for k, _, _ in items])
-        self.state.skipped = []
         lines = []
         for _key, label, required in items:
             if required:
@@ -79,7 +78,7 @@ class Guide:
                 return stage
         return None
 
-    def confirm(self, workflow: WorkflowState | None = None) -> tuple[bool, str]:
+    def confirm(self) -> tuple[bool, str]:
         """用户按了 y：把 inbox 里的文件收进来（不看类型）。
         返回 (本阶段是否收齐, 给用户的话)。"""
         files = self._visible_files()
@@ -146,6 +145,3 @@ class Guide:
             self.state.skipped.extend(pend)
             return self.state.done()
         return False
-
-
-from .workflow import WorkflowState

@@ -22,8 +22,7 @@ class Agent:
     def handle(self, user_text: str) -> str:
         """处理客户一句话，返回主管的最终回复（中间的工具调用不外露）。
 
-        收材料阶段由 TUI 的固定引导负责（不调 LLM），这里如果发现主管想
-        调 new_project 开项目，自动推进状态机到收模板阶段。
+        收材料阶段由 TUI 的固定引导负责（不调 LLM），材料齐后才交到这里。
         """
         tools_brief = "、".join(self.registry.names())
         msgs: list[dict] = [
@@ -44,16 +43,9 @@ class Agent:
                 })
                 continue
             result = tool.run(tool_args or {})
-            if tool_name == "new_project" and not result.startswith("工具"):
-                self._advance_after_new_project()
             msgs.append({"role": "assistant", "content": reply})
             msgs.append({"role": "user", "content": f"（工具 {tool_name} 结果：{result}）"})
         return "这一轮我转得太久了，先停一下。您刚才说什么，麻烦再说一遍？"
-
-    def _advance_after_new_project(self) -> None:
-        from .workflow import Stage
-        if self.workflow.stage is Stage.IDLE:
-            self.workflow.advance(Stage.COLLECT_TEMPLATE)
 
     @staticmethod
     def _parse(reply: str) -> tuple[str | None, dict | None, str | None]:

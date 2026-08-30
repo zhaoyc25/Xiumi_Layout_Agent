@@ -6,11 +6,10 @@
 
 ## 工作原理（标准流程）
 
-1. **开新项目**：对话中说明，Agent 生成 `<task_id>`（格式 `YYYYMMDD_短slug`）并清理上次残留。
-2. **入库模板**：提供 模板文字稿 + 模板 HTML → Agent 将文字层级与 HTML 格式一一匹配，生成"标准格式文件"（JSON 映射）。
-3. **提交新稿**：提供 新文字稿（txt/word，可为脏格式）+ 图片 → Agent 自动清洗、分级、标记图片插入位置，并上传图床获取外链。
-4. **替换生成**：Agent 按模板格式做文本替换 / 节点复制 / 节点删除，产出 `workspace/<task_id>/output/result.html`。
-5. **人工校验**：上传秀米，手机端扫码预览（手机预览是最终校验标准）。
+1. **开新项目**：对话中按 y，Agent 生成任务号并固定问答引导收材料（此阶段零 LLM）。
+2. **收材料**：把 模板文字稿、模板HTML、新文字稿（+可选图片）逐个丢进 `inbox/`，每次输 y；Agent 按类别归档到 `workspace/<task_id>/input/{template,draft,images}/`。
+3. **AI 接手**：LLM 主管按三阶段干活——检查材料（缺了找你补）→ 分级展示（结果放 `outbox/`，逐条念给你确认）→ 生成成品（放 `outbox/`，反复调整到满意）。
+4. **人工校验**：上传秀米，手机端扫码预览（手机预览是最终校验标准）。
 
 **原则**：文字稿一字不改、图片顺序不调换；HTML 只能由模板节点替换/复制/删除得到，绝不凭空手写。
 
@@ -30,17 +29,18 @@ src/xiumi_layout_agent/
 ├── replace/      # 核心替换：新稿套用模板生成 result.html（桩）
 ├── image/        # 图片位标记、图床上传外链（留修图/拼图接口）（桩）
 ├── storage/      # 模板库存取选用（扩展接口）（桩）
-└── cli.py        # 命令行入口
+└── cli.py        # 命令行入口（chat / clean）
 tests/           # 与 src 同构
 inbox/           # 客户唯一投递处（一次一个文件，助手引导归档）
+outbox/          # AI 产出物（分级展示、成品）统一放这里
 templates/       # 模板文字稿 + 模板 HTML（入库）
-workspace/       # 每次任务的输入输出（不入库）
+workspace/       # 每次任务的输入（按任务号+类别归档，不入库）
 secrets/         # 敏感信息（不入库，见 SECRET.md）
 secrets.example/ # 敏感信息结构示例（入库）
 scripts/         # 辅助脚本
 ```
 
-实施计划见 [PLAN.md](PLAN.md)（先建主管后写工具，当前进度 M2）。
+实施计划见 [PLAN.md](PLAN.md)（先建主管后写工具，当前进度：M2 完成，M3 scan_inbox 进行中）。
 
 ## 快速开始
 
@@ -120,10 +120,13 @@ Agent 协作规范见 [AGENTS.md](AGENTS.md)，敏感信息说明见 [SECRET.md]
 ## 路线图
 
 - [x] 需求与架构设计
+- [x] chat：对话主管（LLM 适配、Agent 循环、工具注册表、状态机、TUI）
+- [x] inbox：固定问答收材料 + 按类别归档 + 垃圾过滤 + xiumi clean
+- [ ] scan_inbox：材料检查真实现（缺件/错位检测）
 - [ ] normalize：文字稿清洗与分级
 - [ ] template：标准格式文件（层级↔HTML 片段映射）
 - [ ] replace：模板套用替换，生成 result.html
 - [ ] image：图床上传外链
 - [ ] storage：模板库存取选用（自设计模板、复用已存模板）
 - [ ] image：修图/拼图接口（`ImageProcessor`）
-- [ ] UI 封装（远期）
+- [ ] Web UI（远期）
