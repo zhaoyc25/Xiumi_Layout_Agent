@@ -16,8 +16,7 @@ def setup(tmp_path):
 def test_begin_stage_prompt(setup):
     g, _ = setup
     # 开场白应包含两样材料与 y 提示
-    assert "模板文字稿" in g.state.needed[0] or True
-    assert len(g.state.needed) == 2
+    assert g.state.needed == ["template_text", "template_html"]
 
 
 def test_confirm_empty_inbox(setup):

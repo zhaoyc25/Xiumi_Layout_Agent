@@ -23,6 +23,8 @@ build/
 htmlcov/
 
 # ===== 任务数据（含客户文字稿与图片，不入库）=====
+inbox/*
+!inbox/.gitkeep
 workspace/*
 !workspace/.gitkeep
 outbox/*

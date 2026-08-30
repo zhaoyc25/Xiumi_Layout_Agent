@@ -24,8 +24,8 @@
 src/xiumi_layout_agent/
 ├── chat/         # 对话主管（先建）：LLM 适配、Agent 循环、工具注册表、
 │                 #   固定问答引导（收材料零 LLM）、状态机、TUI
-├── normalize/    # 文字稿清洗与分级（txt/word→结构化，容忍脏输入）（桩）
-├── template/     # 模板解析：层级↔HTML格式匹配、标准格式文件读写（桩）
+├── normalize/    # 新稿清洗与规则分级（txt/word→结构化，容忍脏输入）（桩）
+├── template/     # 模板 HTML 结构提取：BeautifulSoup 按嵌入签名分组、标准格式文件（桩）
 ├── replace/      # 核心替换：新稿套用模板生成 result.html（桩）
 ├── image/        # 图片位标记、图床上传外链（留修图/拼图接口）（桩）
 ├── storage/      # 模板库存取选用（扩展接口）（桩）
@@ -40,7 +40,7 @@ secrets.example/ # 敏感信息结构示例（入库）
 scripts/         # 辅助脚本
 ```
 
-实施计划见 [PLAN.md](PLAN.md)（先建主管后写工具，当前进度：M2 完成，M3 scan_inbox 进行中）。
+实施计划见 [PLAN.md](PLAN.md)（先建主管后写工具，当前进度：M3 完成，M4 模板结构提取+新稿分级待开工）。
 
 ## 快速开始
 
@@ -122,10 +122,9 @@ Agent 协作规范见 [AGENTS.md](AGENTS.md)，敏感信息说明见 [SECRET.md]
 - [x] 需求与架构设计
 - [x] chat：对话主管（LLM 适配、Agent 循环、工具注册表、状态机、TUI）
 - [x] inbox：固定问答收材料 + 按类别归档 + 垃圾过滤 + xiumi clean
-- [ ] scan_inbox：材料检查真实现（缺件/错位检测）
-- [ ] normalize：文字稿清洗与分级
-- [ ] template：标准格式文件（层级↔HTML 片段映射）
-- [ ] replace：模板套用替换，生成 result.html
+- [x] scan_inbox：材料检查真实现（缺件/错位检测）
+- [ ] normalize + template：BeautifulSoup 提取模板结构（嵌入签名分组）+ LLM 清洗分级新稿并映射模板层级
+- [ ] replace：按映射克隆模板节点替换文字，生成 result.html（固定Python，零LLM）
 - [ ] image：图床上传外链
 - [ ] storage：模板库存取选用（自设计模板、复用已存模板）
 - [ ] image：修图/拼图接口（`ImageProcessor`）

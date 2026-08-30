@@ -41,7 +41,7 @@ def run_tui(llm: LLMClient | None = None, inbox: Path | None = None) -> None:
 
     session = Session()
     workflow = WorkflowState()
-    agent = Agent(llm, build_default_registry(session), session, workflow)
+    agent = Agent(llm, build_default_registry(session, llm), session, workflow)
     guide = Guide(inbox)
     guided = True
 

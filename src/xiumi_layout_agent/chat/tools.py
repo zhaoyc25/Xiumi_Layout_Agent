@@ -1,10 +1,13 @@
-"""工具注册表：每个工具 = 名称 + 参数 schema + 实现。现阶段全部是桩。"""
+"""工具注册表：每个工具 = 名称 + 参数 schema + 实现。"""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .llm import LLMClient
 
 
 @dataclass
@@ -49,8 +52,8 @@ def _stub(tool_name: str) -> Callable[[dict[str, Any]], str]:
     return f
 
 
-def build_default_registry(session: Session) -> ToolRegistry:
-    """M1 全桩注册表。后续里程碑逐个替换为真实现。"""
+def build_default_registry(session: Session, llm: LLMClient | None = None) -> ToolRegistry:
+    """工具注册表。llm 传入后 normalize_draft 可用；不传则该工具报错。"""
     reg = ToolRegistry()
 
     def _new_project(args: dict[str, Any]) -> str:
@@ -103,18 +106,107 @@ def build_default_registry(session: Session) -> ToolRegistry:
         func=_reset_all,
     ))
 
-    scan_inbox_desc = (
-        "检查 workspace/<task_id>/input/ 下已归档的材料："
-        "template/ 应有模板文字稿和模板网页文件，draft/ 应有新文字稿，images/ 是图片（可能没有）。"
-        "返回各目录文件清单，用于阶段一【检查材料】判断缺不缺。"
-        "注意：归档已由系统完成，本工具不搬文件，只做检查"
-    )
+    def _scan_inbox(args: dict[str, Any]) -> str:
+        from .config import _REPO_ROOT as root
+        from .scan import scan_input
+
+        task_id = args.get("task_id") or session.data.get("task_id")
+        if not task_id:
+            return "还没有任务号，没法检查材料。请先开新项目。"
+        base = root / "workspace" / task_id / "input"
+        if not base.exists():
+            return f"没找到 workspace/{task_id}/input/，可能材料还没归档。"
+        return scan_input(base, task_id).render()
+
+    reg.register(Tool(
+        name="scan_inbox",
+        description=(
+            "检查 workspace/<task_id>/input/ 下已归档的材料："
+            "template/ 应有模板文字稿和模板网页文件，draft/ 应有新文字稿，images/ 是图片（可能没有）。"
+            "返回各目录文件清单与缺件/错位判断，用于阶段一【检查材料】。"
+            "归档已由系统完成，本工具不搬文件，只做检查。task_id 不传时用当前会话的任务号"
+        ),
+        params_schema={
+            "type": "object",
+            "properties": {"task_id": {"type": "string"}},
+        },
+        func=_scan_inbox,
+    ))
+
+    def _build_template_map(args: dict[str, Any]) -> str:
+        from ..template.extract import extract_template
+        from .config import _REPO_ROOT as root
+
+        task_id = args.get("task_id") or session.data.get("task_id")
+        if not task_id:
+            return "还没有任务号，没法提取模板结构。请先开新项目。"
+        tpl_dir = root / "workspace" / task_id / "input" / "template"
+        html_files = [f for f in tpl_dir.iterdir() if f.suffix in (".html", ".htm")] if tpl_dir.exists() else []
+        if not html_files:
+            return f"在 workspace/{task_id}/input/template/ 下没找到 HTML 文件。"
+        ts = extract_template(html_files[0])
+        session.data["template_structure"] = ts
+        return ts.render_summary()
+
+    reg.register(Tool(
+        name="build_template_map",
+        description=(
+            "用 BeautifulSoup 解析模板HTML，按嵌入结构签名提取层级（不只用字号），"
+            "产出层级信息（字号/颜色/HTML片段样例/内容样例）存在会话中。"
+            "供 normalize_draft 映射和 replace_template 克隆使用。"
+            "task_id 不传时用当前会话的任务号"
+        ),
+        params_schema={
+            "type": "object",
+            "properties": {"task_id": {"type": "string"}},
+        },
+        func=_build_template_map,
+    ))
+
+    def _normalize_draft(args: dict[str, Any]) -> str:
+        from ..normalize.clean import clean_text
+        from ..normalize.level import level_draft
+        from .config import _REPO_ROOT as root
+
+        task_id = args.get("task_id") or session.data.get("task_id")
+        if not task_id:
+            return "还没有任务号，没法处理新稿。请先开新项目。"
+        ts = session.data.get("template_structure")
+        if ts is None:
+            return "还没提取模板结构，请先调用 build_template_map。"
+        if llm is None:
+            return "没有可用的 LLM，无法对新稿分级映射。请配置 LLM 或使用 MockLLM。"
+        draft_dir = root / "workspace" / task_id / "input" / "draft"
+        text_files = [f for f in draft_dir.iterdir() if f.suffix == ".txt"] if draft_dir.exists() else []
+        if not text_files:
+            return f"在 workspace/{task_id}/input/draft/ 下没找到文字稿。"
+        raw = text_files[0].read_text(encoding="utf-8")
+        cleaned = clean_text(raw)
+        leveled = level_draft(cleaned, ts, llm)
+        session.data["leveled_draft"] = leveled
+        lines = [f"新稿分级完成，共 {len(leveled)} 块："]
+        for i, blk in enumerate(leveled, 1):
+            lines.append(f"  {i}. [层级{blk.get('level','?')}] {blk.get('text','')[:40]}")
+        return "\n".join(lines)
+
+    reg.register(Tool(
+        name="normalize_draft",
+        description=(
+            "清洗新文字稿并用LLM分级映射到模板层级。需要先调用 build_template_map。"
+            "LLM 同时看模板结构和新稿，输出每块对应的模板层级号。"
+            "结果存在会话中，供 replace_template 使用。"
+            "task_id 不传时用当前会话的任务号"
+        ),
+        params_schema={
+            "type": "object",
+            "properties": {"task_id": {"type": "string"}},
+        },
+        func=_normalize_draft,
+    ))
+
     stubs = [
-        ("scan_inbox", scan_inbox_desc, {}),
-        ("normalize_draft", "清洗新文字稿并按层级分级（大标题/二级标题/正文/图片位）", {}),
-        ("review_levels", "把分级不明确的段落交给 AI 复核，给出建议", {}),
-        ("build_template_map", "解析模板文字稿+模板HTML，生成标准格式文件", {}),
-        ("replace_template", "把分级后的新稿套进模板，生成 result.html", {}),
+        ("review_levels", "把分级结果逐条展示给客户确认，写展示文件到 outbox/", {}),
+        ("replace_template", "按映射克隆模板节点替换文字，生成 result.html", {}),
         ("upload_images", "把图片上传图床，换取稳定外链", {}),
         ("deliver_result", "交付 result.html，提醒客户上传秀米并手机预览", {}),
     ]

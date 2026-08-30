@@ -122,7 +122,7 @@ class Guide:
             if not f.name.startswith(".") and f.name not in junk
         )
 
-    def _junk_files(self) -> list[object]:
+    def _junk_files(self) -> list[Path]:
         if not self.inbox.exists():
             return []
         return [f for f in self.inbox.iterdir() if f.name in self._junk_names()]
