@@ -49,6 +49,25 @@ def test_build_prompt_contains_outline():
     assert "首句" in prompt
 
 
+def test_build_prompt_contains_format_desc():
+    """_build_prompt 应把每层嵌入格式（背景/边框/圆角等）喂给分级 LLM。"""
+    tpl = TemplateStructure(
+        source_file="t.html",
+        levels=[
+            LevelInfo(
+                level_id=1, sig_hash="a", font_size=24, color="rgb(255,255,255)",
+                is_heading=True, block_count=1, html_sample="<section>x</section>",
+                content_samples=["大标题"],
+                format_desc="[background-color=rgb(145,184,186);border-radius=0px26px]",
+            ),
+        ],
+    )
+    prompt = _build_prompt("  1. [标题#] x", 1, tpl)
+    assert "嵌入格式" in prompt
+    assert "background-color" in prompt
+    assert "border-radius" in prompt
+
+
 def test_parse_json_direct():
     reply = '[{"index": 1, "level": 1}, {"index": 2, "level": 3}]'
     result = _parse_json(reply)

@@ -61,20 +61,22 @@ def _guess_level(block: Block, template: TemplateStructure) -> int:
 
 
 def _build_prompt(outline: str, block_count: int, template: TemplateStructure) -> str:
-    """构造给 LLM 的 prompt：模板结构 + 大纲 + 输出要求。"""
+    """构造给 LLM 的 prompt：模板结构（含嵌入格式）+ 大纲 + 输出要求。"""
     levels_desc = []
     for lv in template.levels:
         kind = "标题" if lv.is_heading else "正文"
         samples = "、".join(f'"{s[:20]}"' for s in lv.content_samples[:3])
+        fmt = lv.format_desc or "（无特别格式）"
         levels_desc.append(
-            f"  层级{lv.level_id}：{lv.font_size}px {kind}"
-            f"（样例：{samples}）"
+            f"  层级{lv.level_id}：{lv.font_size}px {kind}\n"
+            f"    嵌入格式：{fmt}\n"
+            f"    样例：{samples}"
         )
     levels_str = "\n".join(levels_desc)
 
     return f"""请把下面的大纲每块标上对应的模板层级号。
 
-模板结构（共{len(template.levels)}个层级）：
+模板结构（共{len(template.levels)}个层级；嵌入格式 = 文字所在板块的背景/边框/圆角/对齐/宽等）：
 {levels_str}
 
 新稿大纲（共{block_count}块）：
@@ -83,7 +85,8 @@ def _build_prompt(outline: str, block_count: int, template: TemplateStructure) -
 要求：
 1. 每块对应模板的一个层级号（1 到 {len(template.levels)}）
 2. 大标题对应字号最大的标题层级，正文段落对应正文字号的层级
-3. 根据 Markdown 层级（#越少层级越高）和内容判断
+3. 不只看字号，还要看每层的嵌入格式（背景色、边框、圆角等）和内容来判断该套进哪个板块
+4. 根据 Markdown 层级（#越少层级越高）和内容判断
 
 输出 JSON 数组，每项格式：
 [{{"index": 1, "level": 1}}, {{"index": 2, "level": 2}}, ...]"""

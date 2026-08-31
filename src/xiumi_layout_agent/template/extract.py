@@ -1,7 +1,10 @@
 """模板 HTML 结构提取：BeautifulSoup 按嵌入结构签名分组，产出层级信息。
 
-核心思路：每个块的"嵌入格式"由外层 2 层 section 的样式决定（display/width/
-color/background/text-align/border-radius 等），跟字号无关。
+核心思路：每个块的"嵌入格式"由外层 2 层 section 的完整样式决定
+（display/width/color/background/background-color/text-align/border/
+box-shadow/border-radius/padding/transform 等），跟字号无关。
+签名取完整 style（仅去掉 box-sizing 这类无区分度噪音），不靠白名单，
+因此 border/box-shadow/任何属性都不会漏。
 同签名 = 同层级；同字号不同结构 = 不同层级。
 
 产出：标准格式文件（层级↔HTML 片段映射），供 LLM 映射 + M7 克隆使用。
@@ -17,26 +20,39 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup, Tag
 
-# 签名里要提取的样式属性（定义"嵌入格式"的关键属性）
-_SIGN_KEYS = [
-    "display", "text-align", "font-size", "color", "width",
-    "background-color", "border-radius", "padding", "justify-content",
-    "flex-flow", "vertical-align", "transform", "letter-spacing",
-    "line-height",
-]
+# 签名里要排除的噪音属性：box-sizing 在秀米模板里几乎每个 section 都有，
+# 无区分度，去掉；其余属性（含 border/box-shadow/background 等）全部保留，
+# 这样才能"完整获取嵌入格式"，不靠白名单漏属性。
+_NOISE_KEYS = {"box-sizing"}
 _PEEK_LAYERS = 2  # 只看外层 2 层（定义嵌入格式，不看内部内容变化）
 _MAX_CONTENT_SAMPLES = 4
 
 
+def _parse_style(style: str) -> dict[str, str]:
+    """解析 style 字符串为 dict：去噪、压缩空格、统一大小写键。"""
+    d: dict[str, str] = {}
+    for chunk in (style or "").split(";"):
+        chunk = chunk.strip()
+        if not chunk or ":" not in chunk:
+            continue
+        k, _, v = chunk.partition(":")
+        k = k.strip().lower()
+        v = re.sub(r"\s+", "", v.strip())  # 统一 rgb()/空格写法
+        if k and k not in _NOISE_KEYS and v:
+            d[k] = v
+    return d
+
+
 def _layer_sig(el: Tag) -> tuple[str, ...]:
-    """单层 section 的样式签名。"""
-    style = el.get("style", "") or ""
-    parts = []
-    for k in _SIGN_KEYS:
-        m = re.search(rf"{re.escape(k)}\s*:\s*([^;]+)", style)
-        if m:
-            parts.append(f"{k}={m.group(1).strip()[:25]}")
-    return tuple(parts)
+    """单层 section 的完整样式签名（除噪后的全部属性，按 key 排序）。"""
+    d = _parse_style(el.get("style", "") or "")
+    return tuple(f"{k}={d[k]}" for k in sorted(d))
+
+
+def _render_sig(sig: tuple[tuple[str, ...], ...]) -> str:
+    """把外层结构签名渲染成人类/LLM 可读字符串。"""
+    parts = ["[" + ";".join(layer) + "]" for layer in sig if layer]
+    return " ".join(parts)
 
 
 def _outer_sig(blk: Tag) -> tuple[tuple[str, ...], ...]:
@@ -114,6 +130,7 @@ class LevelInfo:
     block_count: int                 # 模板中该层级的块数
     html_sample: str                 # 一个 HTML 片段样例（M7 克隆用）
     content_samples: list[str]       # 几段文字样例（给 LLM 映射参考）
+    format_desc: str = ""            # 外层嵌入格式可读描述（背景/边框/圆角/对齐/宽…），给 LLM 和人看
     signature: tuple = field(default=(), repr=False)  # 完整签名（调试用）
 
     def to_dict(self) -> dict:
@@ -124,6 +141,7 @@ class LevelInfo:
             "is_heading": self.is_heading,
             "block_count": self.block_count,
             "content_samples": self.content_samples,
+            "format_desc": self.format_desc,
         }
 
 
@@ -148,6 +166,8 @@ class TemplateStructure:
                 f"  层级{lv.level_id} [{lv.font_size}px {lv.color}] {kind}"
                 f"（{lv.block_count}个块）"
             )
+            if lv.format_desc:
+                lines.append(f"    格式：{lv.format_desc}")
             for s in lv.content_samples:
                 lines.append(f"    · {s[:40]}")
         return "\n".join(lines)
@@ -203,6 +223,7 @@ def extract_template(html_path: Path) -> TemplateStructure:
                 seen.add(key)
                 content_samples.append(t)
 
+        sig = _outer_sig(blks[0])
         levels.append(LevelInfo(
             level_id=i + 1,
             sig_hash=sig_hash,
@@ -212,7 +233,8 @@ def extract_template(html_path: Path) -> TemplateStructure:
             block_count=len(blks),
             html_sample=str(blks[0]),
             content_samples=content_samples,
-            signature=_outer_sig(blks[0]),
+            format_desc=_render_sig(sig),
+            signature=sig,
         ))
 
     return TemplateStructure(

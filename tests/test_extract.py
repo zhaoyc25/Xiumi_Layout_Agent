@@ -110,3 +110,53 @@ def test_extract_to_dict(tmp_path):
     assert "source_file" in d
     assert "levels" in d
     assert len(d["levels"]) == 4
+    assert "format_desc" in d["levels"][0]
+
+
+# 带 border/box-shadow 的样本：两个块字号相同，但嵌入格式（边框 vs 投影）不同
+_BORDER_SAMPLE_HTML = """<!DOCTYPE html>
+<html><body>
+<article>
+<section>
+  <section style="font-size: 14px; border: 2px solid rgb(25,43,78); box-sizing: border-box;">
+    <p>带边框的正文块。</p>
+  </section>
+  <p></p>
+  <section style="font-size: 14px; box-shadow: rgba(96, 178, 154, 0.51) 0px 0px 9px; box-sizing: border-box;">
+    <p>带投影的正文块。</p>
+  </section>
+</section>
+</article>
+</body></html>"""
+
+
+def _write_border_sample(tmp_path: Path) -> Path:
+    p = tmp_path / "border_sample.html"
+    p.write_text(_BORDER_SAMPLE_HTML, encoding="utf-8")
+    return p
+
+
+def test_extract_format_desc_contains_border_and_shadow(tmp_path):
+    """format_desc 必须包含 border/box-shadow 等完整嵌入格式，不靠白名单漏属性。"""
+    p = _write_border_sample(tmp_path)
+    ts = extract_template(p)
+    joined = " ".join(lv.format_desc for lv in ts.levels)
+    assert "border=" in joined
+    assert "box-shadow=" in joined
+    assert "box-sizing" not in joined  # 噪音属性应被去掉
+
+
+def test_extract_separates_different_borders(tmp_path):
+    """字号相同但边框/投影不同的块，应分成不同层级（签名完整才能做到）。"""
+    p = _write_border_sample(tmp_path)
+    ts = extract_template(p)
+    assert len(ts.levels) == 2  # 一个带 border、一个带 box-shadow → 两个层级
+
+
+def test_extract_render_summary_contains_format(tmp_path):
+    """render_summary 应展示每层的嵌入格式描述。"""
+    p = _write_sample(tmp_path)
+    ts = extract_template(p)
+    summary = ts.render_summary()
+    assert "格式" in summary
+    assert "background-color" in summary  # _SAMPLE_HTML 含背景色
