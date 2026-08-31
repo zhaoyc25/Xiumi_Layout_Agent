@@ -15,18 +15,23 @@ class LLMClient(Protocol):
 
 
 class OpenAICompatLLM:
-    """[OI] 兼容接口适配（如 [OI] / GLM / DeepSeek 等）。"""
+    """[OI] 兼容接口适配（如 [OI] / GLM / DeepSeek 等）。流式模式防网关超时。"""
 
     def __init__(self, cfg: LLMConfig):
         self._model = cfg.model
-        self._client = OpenAI(api_key=cfg.api_key, base_url=cfg.base_url)
+        self._client = OpenAI(api_key=cfg.api_key, base_url=cfg.base_url, timeout=300)
 
     def chat(self, messages: list[dict]) -> str:
         resp = self._client.chat.completions.create(
             model=self._model,
             messages=messages,
+            stream=True,
         )
-        return resp.choices[0].message.content or ""
+        chunks: list[str] = []
+        for chunk in resp:
+            if chunk.choices and chunk.choices[0].delta.content:
+                chunks.append(chunk.choices[0].delta.content)
+        return "".join(chunks)
 
 
 class MockLLM:

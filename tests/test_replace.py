@@ -85,6 +85,26 @@ def test_replace_text_basic():
     assert clone.find("b") is not None  # <b> 标签保留
 
 
+def test_replace_text_bold():
+    """**加粗** 转成 <b> 标签。"""
+    clone = BeautifulSoup('<section><p>原文</p></section>', "lxml").find("section")
+    _replace_text(clone, "**加粗内容**普通内容")
+    b = clone.find("b")
+    assert b is not None
+    assert b.get_text() == "加粗内容"
+    assert "普通内容" in clone.get_text()
+
+
+def test_replace_text_line_break():
+    """多行文字的 \\n 转成 <br>。"""
+    clone = BeautifulSoup('<section><p>原文</p></section>', "lxml").find("section")
+    _replace_text(clone, "第一行\n第二行")
+    br = clone.find("br")
+    assert br is not None
+    assert "第一行" in clone.get_text()
+    assert "第二行" in clone.get_text()
+
+
 def test_replace_text_multi_nodes():
     """多个文字节点：第一个替换，其余删除。"""
     clone = BeautifulSoup('<section>甲<p>乙</p>丙</section>', "lxml").find("section")

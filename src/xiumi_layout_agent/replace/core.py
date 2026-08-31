@@ -6,9 +6,10 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
-from bs4 import BeautifulSoup, NavigableString, Tag
+from bs4 import BeautifulSoup, Tag
 
 from ..template.extract import TemplateStructure
 
@@ -68,14 +69,26 @@ def replace_template(
 
 
 def _replace_text(clone: Tag, new_text: str) -> None:
-    """找到克隆块里的文字节点，替换成新文字。
-
-    多个文字节点时：第一个替换为全文，其余删除。
-    """
+    """替换克隆块里的文字，把 **加粗** 转成 <b>、\\n 转成 <br>。"""
     strings = [s for s in clone.find_all(string=True) if s.strip()]
     if not strings:
         return
-    strings[0].replace_with(NavigableString(new_text))
+
+    # Markdown → HTML
+    html_text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", new_text)
+    html_text = html_text.replace("\n", "<br>")
+
+    # 解析成 DOM 节点
+    parsed = BeautifulSoup(f"<div>{html_text}</div>", "lxml").find("div")
+
+    # 替换第一个文字节点所在的容器内容
+    container = strings[0].parent
+    strings[0].extract()
+    if parsed:
+        for child in list(parsed.children):
+            container.append(child.extract())
+
+    # 删掉其余文字节点
     for s in strings[1:]:
         s.extract()
 
