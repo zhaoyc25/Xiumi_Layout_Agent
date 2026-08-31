@@ -1,0 +1,47 @@
+{
+   "action": {
+      "default_icon": {
+         "16": "images/logo_normal_16.png",
+         "24": "images/logo_normal_24.png",
+         "32": "images/logo_normal_32.png"
+      },
+      "default_popup": "views/popup.html",
+      "default_title": "__MSG_extensionName__"
+   },
+   "author": "developer@xiumi.us",
+   "background": {
+      "service_worker": "scripts/serviceWorker.js",
+      "type": "module"
+   },
+   "content_scripts": [ {
+      "js": [ "scripts/crossoverSource.js" ],
+      "matches": [ "https://xiumi.us/*", "https://*.xiumi.us/*", "http://*.xiumi.us/*" ],
+      "run_at": "document_idle"
+   }, {
+      "js": [ "scripts/crossoverSink.js" ],
+      "matches": [ "https://mp.weixin.qq.com/cgi-bin/appmsg*" ],
+      "run_at": "document_idle"
+   } ],
+   "default_locale": "zh_CN",
+   "description": "__MSG_extensionDescription__",
+   "externally_connectable": {
+      "matches": [ "https://xiumi.us/*", "https://*.xiumi.us/*", "http://*.xiumi.us/*" ]
+   },
+   "host_permissions": [ "https://mp.weixin.qq.com/*" ],
+   "icons": {
+      "128": "images/logo_normal_128.png",
+      "16": "images/logo_normal_16.png",
+      "32": "images/logo_normal_32.png",
+      "48": "images/logo_normal_48.png"
+   },
+   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAq64qO3j7vjulUsNjNA6IbszAjCKjiKwRpWjghea/omKcCIPM7Og/9bTe3NNuIXt75QD/CTjaryQcnEKYMvR20eDFYJKiQ+n3Dp5zNgFCXJOaXaI1wg3EqQcKG8Y++sFXV3P8GaYTcS18vivjytNq3z0yp3gGpAJ2hC9/sd1/GfzQSuLNReGlPyyj2wz2ooS2V4ZccXtztHTkeHMqvc5hd1dg5LOEdPhkQEEMSjRivWf0ulq74m1ti0gmdBUb8O9eoIy3JMuWqAMmDXdAoHWUbMcdP/t5mYo289Rzd2amX/9Ursy6Vjeq4PU6FXSS0xOuFrK4YMxrAzuMwl2mts79vQIDAQAB",
+   "manifest_version": 3,
+   "name": "__MSG_extensionName__",
+   "permissions": [ "tabs", "alarms", "activeTab", "scripting" ],
+   "update_url": "https://edge.microsoft.com/extensionwebstorebase/v1/crx",
+   "version": "0.0.7",
+   "web_accessible_resources": [ {
+      "matches": [ "\u003Call_urls>" ],
+      "resources": [ "images/*.jpeg" ]
+   } ]
+}

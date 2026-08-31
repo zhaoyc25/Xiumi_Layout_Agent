@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "本地文章导入微信公众号",
+  "version": "0.1.0",
+  "description": "把本地排版 HTML 填入已打开的微信公众号图文编辑页，不自动保存或发布。",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "导入本地文章"
+  },
+  "permissions": ["tabs", "scripting"],
+  "host_permissions": ["https://mp.weixin.qq.com/*"]
+}

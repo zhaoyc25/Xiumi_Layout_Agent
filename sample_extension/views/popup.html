@@ -1,0 +1,92 @@
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <style>
+        body {
+            min-width: 200px;
+            padding: 10px;
+        }
+
+        a.btn {
+            display: inline-flex;
+            align-items: center;
+            flex-shrink: 0;
+            font-weight: 500;
+            justify-content: center;
+            box-sizing: border-box;
+            outline-width: 0;
+            min-width: 5.14em;
+            padding: 8px 16px;
+            overflow: hidden;
+            user-select: none;
+            cursor: pointer;
+            text-decoration: none;
+            text-align: center;
+            border: 1px solid #333;
+            border-radius: 4px;
+        }
+
+        .btn.go-to-xiumi {
+            width: 100%;
+            color: white;
+            background-color: #eb4b4b;
+            border: 1px solid #c95e57;
+        }
+
+        .btn.go-to-xiumi:hover {
+            background-color: #ff9276;
+        }
+
+        .tn-xover-version-prompt p {
+            display: none;
+        }
+
+        .tn-xover-version-prompt.checking p.checking {
+            display: block;
+        }
+
+        .tn-xover-version-prompt.up-to-date p.up-to-date {
+            display: block;
+        }
+
+        .tn-xover-version-prompt.need-to-update p.need-to-update {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+<h3>秀米插件</h3>
+<div class="tn-xover-current-version">
+    <p>
+        当前版本 v<span class="version-text current-version"></span>
+    </p>
+</div>
+<div class="tn-xover-version-prompt">
+    <p class="checking">
+        正在检测版本更新...
+    </p>
+    <!--
+    <p class="up-to-date">
+        当前插件版本已是最新！
+    </p>
+    -->
+    <p class="need-to-update">
+        最新版本 v<span class="version-text latest-version"></span>
+        <br>
+        你需要更新插件版本！
+    </p>
+</div>
+<div>
+    <p>
+        <a href="https://v.xiumius.cn/board/v5/2a5va/468168482" target="_blank">关于秀米插件</a>
+    </p>
+    <p>
+        <a href="https://xiumi.us" target="_blank">前往秀米</a>
+    </p>
+    <p>
+        <a href="https://jsj.top/f/wOkl9U" target="_blank">意见反馈</a>
+    </p>
+</div>
+<script src="../scripts/popup.js"></script>
+</body>
+</html>

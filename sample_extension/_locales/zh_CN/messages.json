@@ -1,0 +1,10 @@
+{
+   "extensionDescription": {
+      "description": "Description of the extension.",
+      "message": "秀米插件"
+   },
+   "extensionName": {
+      "description": "Name of the extension.",
+      "message": "秀米插件"
+   }
+}
