@@ -81,25 +81,16 @@ LLM 新稿分级+映射即 M4 第三步，不再单列里程碑。
 ### ~~M6 模板解析与标准格式文件~~ → 合并进 M4
 模板 HTML 结构提取由 BeautifulSoup 完成（M4 第一步）；标准格式文件作为 M4 产出，供 M7 使用。
 
-### M7 核心替换（replace，替换桩）
+### M7 核心替换（replace，替换桩）✅（已完成）
 
-M4 产出标准格式文件 + 确认后的新稿分级映射，M7 按映射机械执行克隆+替换。
+M4 产出模板结构 + 新稿分级映射，M7 按映射机械执行克隆+替换。
+全程固定 Python（BeautifulSoup），零 LLM。
 
-层级映射规则（在 M4 由 LLM 完成，M7 只执行）：
-- **标题层**（非正文的独立块）：新稿从高到低一一对应模板从高到低，多出的不用
-- **正文层**（正文块内部的子分级）：最低级保证对应；模板多出的中间级不用；少的用字号/加粗补
-- M4 提取时需区分"标题层"与"正文内子层"（独立顶层块 vs 嵌在 body 内的节点）
-
-图片处理：
-- 模板正文块内部的图片节点 → **删除**
-- 模板头图等非正文区域的图片 → **保持不动**
-- 新稿目前只有纯文字，不插图片
-- 图片插入接口预留（客户在稿子中标位置 → 对应插入），当前不实现
-
-- [ ] 按 M4 映射关系克隆模板节点、替换文字、清理 body 内部图片/h3、拼装成 result.html
-- [ ] 全程固定 Python（BeautifulSoup），零 LLM（映射已在 M4 完成）
-- [ ] 成品放 `outbox/`
-- [ ] 测试：节点增删/替换的对照用例（已用真实模板验证可行性）
+- [x] `replace/core.py`：克隆模板对应层级 HTML 片段 → 清理图片 → 替换文字节点 → 拼装回 `<article>` 容器
+- [x] 图片处理：所有克隆块内的图片删除（新稿纯文字）；页面头部/装饰区图片保留不动
+- [x] `tools.py` 接线 `replace_template`：读会话中的模板结构+分级映射，生成 `outbox/result.html`
+- [x] 测试：7 个用例（克隆/替换/清理/拼装/空稿/缺层级/页面结构保留）；真实文件端到端验证通过（1.html+now.md → 56块 result.html，内容块内0图片）
+- [ ] 图片插入接口预留（客户在稿子中标位置 → 对应插入），当前不实现
 
 ### M8 图片处理（image，替换桩）
 - [ ] 图片插入位置：由客户在稿子中对应位置标记（只标正文中间的图片，头图不管）
@@ -157,3 +148,4 @@ M4 产出标准格式文件 + 确认后的新稿分级映射，M7 按映射机�
 | 2026-08-31 | M4 主体完成 | template/extract.py（BeautifulSoup嵌入签名分组→层级，区分标题/正文，HTML片段样例）；normalize/clean.py（规则清洗）；normalize/level.py（LLM分级+映射，直调llm.chat返回JSON）；tools.py 接线 build_template_map+normalize_draft；tui.py 传 llm；87 passed / ruff clean |
 | 2026-08-31 | 已知问题 | LLM 处理长文本（200行/16KB）反复超时；临时方案：要求新稿以 Markdown 提交，固定程序解析大纲，只把大纲交给 LLM 映射模板层级（输入从16KB降到~1KB） |
 | 2026-08-31 | M4 大纲方案完成 | normalize/outline.py（Markdown解析：标题全文+正文前10字预览→紧凑大纲）；level.py 改为发大纲给LLM（输入~2KB，输出~1KB）；真实文件验证通过（1.html+now.md，56块映射，113s）；97 passed / ruff clean |
+| 2026-08-31 | M7 完成 | replace/core.py（克隆模板HTML片段→清理图片→替换文字→拼装result.html）；tools.py 接线 replace_template→写 outbox/result.html；7个测试用例；真实文件端到端验证（56块，内容块0图片）；97 passed / ruff clean |

@@ -124,7 +124,7 @@ Agent 协作规范见 [AGENTS.md](AGENTS.md)，敏感信息说明见 [SECRET.md]
 - [x] inbox：固定问答收材料 + 按类别归档 + 垃圾过滤 + xiumi clean
 - [x] scan_inbox：材料检查真实现（缺件/错位检测）
 - [x] normalize + template：BeautifulSoup 提取模板结构 + Markdown大纲解析 + LLM分级映射
-- [ ] replace：按映射克隆模板节点替换文字，生成 result.html（固定Python，零LLM）
+- [x] replace：按映射克隆模板节点替换文字，生成 result.html（固定Python，零LLM）
 - [ ] image：图床上传外链
 - [ ] storage：模板库存取选用（自设计模板、复用已存模板）
 - [ ] image：修图/拼图接口（`ImageProcessor`）

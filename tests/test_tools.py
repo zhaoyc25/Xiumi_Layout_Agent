@@ -35,14 +35,14 @@ def test_default_registry_stubs():
         "new_project", "reset_all", "scan_inbox", "normalize_draft", "review_levels",
         "build_template_map", "replace_template", "upload_images", "deliver_result",
     }
-    # scan_inbox / build_template_map / normalize_draft 已落地，不再是桩
+    # scan_inbox / build_template_map / normalize_draft / replace_template 已落地
     assert "任务号" in reg.get("scan_inbox").run({})
     assert "任务号" in reg.get("build_template_map").run({})
-    # normalize_draft 无 task_id 时报错（不是"功能未实现"桩）
     assert "功能未实现" not in reg.get("normalize_draft").run({})
+    assert "任务号" in reg.get("replace_template").run({})
     # 其余仍是桩
     assert "功能未实现" in reg.get("review_levels").run({})
-    assert "功能未实现" in reg.get("replace_template").run({})
+    assert "功能未实现" in reg.get("upload_images").run({})
 
 
 def test_new_project_records_task_id():

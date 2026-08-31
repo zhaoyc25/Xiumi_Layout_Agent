@@ -202,9 +202,47 @@ def build_default_registry(session: Session, llm: LLMClient | None = None) -> To
         func=_normalize_draft,
     ))
 
+    def _replace_template(args: dict[str, Any]) -> str:
+        from ..replace.core import replace_template as do_replace
+        from .config import _REPO_ROOT as root
+
+        task_id = args.get("task_id") or session.data.get("task_id")
+        if not task_id:
+            return "还没有任务号，没法生成成品。请先开新项目。"
+        ts = session.data.get("template_structure")
+        if ts is None:
+            return "还没提取模板结构，请先调用 build_template_map。"
+        leveled = session.data.get("leveled_draft")
+        if not leveled:
+            return "还没对新稿分级，请先调用 normalize_draft。"
+        tpl_dir = root / "workspace" / task_id / "input" / "template"
+        html_files = sorted(f for f in tpl_dir.iterdir() if f.suffix in (".html", ".htm")) if tpl_dir.exists() else []
+        if not html_files:
+            return f"在 workspace/{task_id}/input/template/ 下没找到 HTML 文件。"
+        result_html = do_replace(html_files[0], ts, leveled)
+        out_dir = root / "outbox"
+        out_dir.mkdir(exist_ok=True)
+        out_path = out_dir / "result.html"
+        out_path.write_text(result_html, encoding="utf-8")
+        session.data["result_path"] = str(out_path)
+        return f"成品已生成：outbox/result.html（{len(leveled)} 块，{len(result_html)} 字符）。请告诉老师文件名，提醒上传秀米并手机扫码预览。"
+
+    reg.register(Tool(
+        name="replace_template",
+        description=(
+            "按分级映射克隆模板节点、替换文字、清理正文图片，生成 result.html 放到 outbox/。"
+            "需要先调用 build_template_map 和 normalize_draft。"
+            "全程固定Python，零LLM。task_id 不传时用当前会话的任务号"
+        ),
+        params_schema={
+            "type": "object",
+            "properties": {"task_id": {"type": "string"}},
+        },
+        func=_replace_template,
+    ))
+
     stubs = [
         ("review_levels", "把分级结果逐条展示给客户确认，写展示文件到 outbox/", {}),
-        ("replace_template", "按映射克隆模板节点替换文字，生成 result.html", {}),
         ("upload_images", "把图片上传图床，换取稳定外链", {}),
         ("deliver_result", "交付 result.html，提醒客户上传秀米并手机预览", {}),
     ]
