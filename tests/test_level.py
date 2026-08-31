@@ -1,11 +1,12 @@
-"""normalize/level.py 测试：LLM 驱动的新稿分块+分级+映射（mock LLM）。"""
+"""normalize/level.py 测试：LLM 驱动的新稿大纲映射（mock LLM）。"""
 
 from __future__ import annotations
 
 import pytest
 
 from xiumi_layout_agent.chat.llm import MockLLM
-from xiumi_layout_agent.normalize.level import _build_prompt, _parse_json, level_draft
+from xiumi_layout_agent.normalize.level import _build_prompt, _guess_level, _parse_json, level_draft
+from xiumi_layout_agent.normalize.outline import Block
 from xiumi_layout_agent.template.extract import LevelInfo, TemplateStructure
 
 
@@ -14,24 +15,19 @@ def _fake_template() -> TemplateStructure:
         source_file="test.html",
         levels=[
             LevelInfo(
-                level_id=1, sig_hash="a", font_size=24, color="rgb(255,255,255)",
-                is_heading=True, block_count=3, html_sample="<section>h1</section>",
-                content_samples=["一、文娱活动", "中关村篇", "新生报到"],
+                level_id=1, sig_hash="a", font_size=16, color="rgb(30,46,82)",
+                is_heading=True, block_count=1, html_sample="<section>h1</section>",
+                content_samples=["四、左右翼民粹主义"],
             ),
             LevelInfo(
-                level_id=2, sig_hash="b", font_size=20, color="rgb(255,255,255)",
-                is_heading=True, block_count=11, html_sample="<section>h2</section>",
-                content_samples=["1.「初见·惊喜款」新生晚会", "3.住", "4.行"],
+                level_id=2, sig_hash="b", font_size=14, color="rgb(62,62,62)",
+                is_heading=True, block_count=5, html_sample="<section>h2</section>",
+                content_samples=["摘要", "一、资本主义危机", "导语"],
             ),
             LevelInfo(
-                level_id=3, sig_hash="c", font_size=14, color="rgb(255,255,255)",
-                is_heading=False, block_count=13, html_sample="<section>body</section>",
-                content_samples=["从舞培、路演到联谊破冰...", "桂香渐起，明月将圆..."],
-            ),
-            LevelInfo(
-                level_id=4, sig_hash="d", font_size=12, color="rgb(62,62,62)",
-                is_heading=True, block_count=1, html_sample="<section>footer</section>",
-                content_samples=["文案 | 研究生会"],
+                level_id=3, sig_hash="c", font_size=14, color="rgb(25,43,78)",
+                is_heading=False, block_count=1, html_sample="<section>body</section>",
+                content_samples=["民粹主义作为一种反建制的..."],
             ),
         ],
     )
@@ -39,92 +35,80 @@ def _fake_template() -> TemplateStructure:
 
 def test_build_prompt_contains_template_info():
     tpl = _fake_template()
-    prompt = _build_prompt("1: test", 1, tpl)
+    prompt = _build_prompt("  1. [标题#] test", 1, tpl)
     assert "层级1" in prompt
-    assert "层级4" in prompt
-    assert "24px" in prompt
-    assert "12px" in prompt
+    assert "层级3" in prompt
+    assert "16px" in prompt
 
 
-def test_build_prompt_contains_line_count():
+def test_build_prompt_contains_outline():
     tpl = _fake_template()
-    prompt = _build_prompt("1: a\n2: b", 2, tpl)
-    assert "共2行" in prompt
-
-
-def test_build_prompt_asks_for_from_to_line():
-    tpl = _fake_template()
-    prompt = _build_prompt("1: test", 1, tpl)
-    assert "from_line" in prompt
-    assert "to_line" in prompt
+    outline = "  1. [标题#] 大标题\n  2. [正文] 首句…尾句"
+    prompt = _build_prompt(outline, 2, tpl)
+    assert "大标题" in prompt
+    assert "首句" in prompt
 
 
 def test_parse_json_direct():
-    reply = '[{"level": 1, "from_line": 1, "to_line": 3}, {"level": 3, "from_line": 4, "to_line": 10}]'
+    reply = '[{"index": 1, "level": 1}, {"index": 2, "level": 3}]'
     result = _parse_json(reply)
     assert len(result) == 2
-    assert result[0]["level"] == 1
-    assert result[1]["from_line"] == 4
+    assert result[0]["index"] == 1
 
 
 def test_parse_json_in_code_block():
-    reply = '好的\n```json\n[{"level": 1, "from_line": 1, "to_line": 1}]\n```\n完毕'
-    result = _parse_json(reply)
-    assert len(result) == 1
-
-
-def test_parse_json_with_surrounding_text():
-    reply = '分析完毕。\n[{"level": 2, "from_line": 1, "to_line": 5}]\n以上结果。'
+    reply = '```json\n[{"index": 1, "level": 2}]\n```'
     result = _parse_json(reply)
     assert len(result) == 1
 
 
 def test_parse_json_invalid_raises():
     with pytest.raises(ValueError):
-        _parse_json("这不是JSON")
+        _parse_json("not json")
 
 
-def test_level_draft_extracts_text_by_line_numbers():
-    """LLM 返回行号，level_draft 按行号切出原文。"""
+def test_level_draft_with_mock_llm():
     tpl = _fake_template()
-    text = "一、标题\n\n正文第一段\n正文第二段\n\n文案 | 编辑部"
-    # 行号：1=一、标题, 2=空, 3=正文第一段, 4=正文第二段, 5=空, 6=文案
-    mock_reply = '[{"level": 1, "from_line": 1, "to_line": 1}, {"level": 3, "from_line": 3, "to_line": 4}, {"level": 4, "from_line": 6, "to_line": 6}]'
+    md = "# 迈向知识自主\n\n## 摘要\n\n这是正文。很长的正文。最后一句。\n\n## 导语"
+    mock_reply = '[{"index": 1, "level": 1}, {"index": 2, "level": 2}, {"index": 3, "level": 3}, {"index": 4, "level": 2}]'
     llm = MockLLM(replies=[mock_reply])
-    result = level_draft(text, tpl, llm)
+    result = level_draft(md, tpl, llm)
 
-    assert len(result) == 3
-    assert result[0] == {"level": 1, "text": "一、标题"}
-    assert result[1] == {"level": 3, "text": "正文第一段\n正文第二段"}
-    assert result[2] == {"level": 4, "text": "文案 | 编辑部"}
+    assert len(result) == 4
+    assert result[0] == {"level": 1, "text": "迈向知识自主"}
+    assert result[1] == {"level": 2, "text": "摘要"}
+    assert result[2]["level"] == 3
+    assert "这是正文" in result[2]["text"]
+    assert result[3] == {"level": 2, "text": "导语"}
 
 
-def test_level_draft_clamps_line_numbers():
-    """行号越界时自动夹到合法范围。"""
+def test_level_draft_fallback_for_missing_assignments():
+    """LLM 漏标某些块时，用兜底逻辑补上。"""
     tpl = _fake_template()
-    text = "只有一行"
-    mock_reply = '[{"level": 1, "from_line": 0, "to_line": 99}]'
+    md = "# 标题\n\n正文段落。"
+    mock_reply = '[{"index": 1, "level": 1}]'  # 漏了 index 2
     llm = MockLLM(replies=[mock_reply])
-    result = level_draft(text, tpl, llm)
-    assert len(result) == 1
-    assert result[0]["text"] == "只有一行"
+    result = level_draft(md, tpl, llm)
+    assert len(result) == 2
+    assert result[0]["level"] == 1
+    assert result[1]["level"] == 3  # 兜底：正文 → 最大的正文层级
 
 
-def test_level_draft_skips_empty_blocks():
-    """from_line == to_line 时空块跳过。"""
+def test_guess_level_heading():
     tpl = _fake_template()
-    text = "内容"
-    mock_reply = '[{"level": 1, "from_line": 1, "to_line": 1}, {"level": 2, "from_line": 2, "to_line": 2}]'
-    llm = MockLLM(replies=[mock_reply])
-    result = level_draft(text, tpl, llm)
-    assert len(result) == 1
-    assert result[0]["text"] == "内容"
+    blk = Block(index=1, kind="heading", md_level=1, preview="x", text="x")
+    assert _guess_level(blk, tpl) == 1  # 最大的标题层级
+
+
+def test_guess_level_body():
+    tpl = _fake_template()
+    blk = Block(index=1, kind="body", md_level=None, preview="x", text="x")
+    assert _guess_level(blk, tpl) == 3  # 最大的正文层级
 
 
 def test_level_draft_llm_called_once():
     tpl = _fake_template()
     llm = MockLLM(replies=["[]"])
-    level_draft("test", tpl, llm)
+    level_draft("# test", tpl, llm)
     assert len(llm.calls) == 1
-    assert llm.calls[0][0]["role"] == "system"
     assert "JSON" in llm.calls[0][0]["content"]

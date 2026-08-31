@@ -164,7 +164,6 @@ def build_default_registry(session: Session, llm: LLMClient | None = None) -> To
     ))
 
     def _normalize_draft(args: dict[str, Any]) -> str:
-        from ..normalize.clean import clean_text
         from ..normalize.level import level_draft
         from .config import _REPO_ROOT as root
 
@@ -177,12 +176,11 @@ def build_default_registry(session: Session, llm: LLMClient | None = None) -> To
         if llm is None:
             return "没有可用的 LLM，无法对新稿分级映射。请配置 LLM 或使用 MockLLM。"
         draft_dir = root / "workspace" / task_id / "input" / "draft"
-        text_files = [f for f in draft_dir.iterdir() if f.suffix == ".txt"] if draft_dir.exists() else []
-        if not text_files:
-            return f"在 workspace/{task_id}/input/draft/ 下没找到文字稿。"
-        raw = text_files[0].read_text(encoding="utf-8")
-        cleaned = clean_text(raw)
-        leveled = level_draft(cleaned, ts, llm)
+        md_files = sorted(f for f in draft_dir.iterdir() if f.suffix == ".md") if draft_dir.exists() else []
+        if not md_files:
+            return f"在 workspace/{task_id}/input/draft/ 下没找到 Markdown 文稿（.md）。"
+        raw = md_files[0].read_text(encoding="utf-8")
+        leveled = level_draft(raw, ts, llm)
         session.data["leveled_draft"] = leveled
         lines = [f"新稿分级完成，共 {len(leveled)} 块："]
         for i, blk in enumerate(leveled, 1):
