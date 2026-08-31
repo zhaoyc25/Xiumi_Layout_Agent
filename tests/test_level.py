@@ -68,6 +68,15 @@ def test_build_prompt_contains_format_desc():
     assert "border-radius" in prompt
 
 
+def test_build_prompt_guides_special_blocks_and_merge():
+    """prompt 应引导 LLM：特殊语义块套特殊格式层级、同标题下连续正文合并。"""
+    tpl = _fake_template()
+    prompt = _build_prompt("  1. [标题#] x", 1, tpl)
+    assert "摘要" in prompt
+    assert "特殊语义块" in prompt
+    assert "合并进一个文本框" in prompt
+
+
 def test_parse_json_direct():
     reply = '[{"index": 1, "level": 1}, {"index": 2, "level": 3}]'
     result = _parse_json(reply)

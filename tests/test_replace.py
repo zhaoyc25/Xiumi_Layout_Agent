@@ -6,7 +6,12 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 
-from xiumi_layout_agent.replace.core import _clean_images, _replace_text, replace_template
+from xiumi_layout_agent.replace.core import (
+    _clean_images,
+    _is_plain_body,
+    _replace_text,
+    replace_template,
+)
 from xiumi_layout_agent.template.extract import LevelInfo, TemplateStructure
 
 # 迷你 xiumi 风格 HTML：3 个层级
@@ -179,3 +184,112 @@ def test_replace_template_empty_draft(tmp_path):
     result = replace_template(html_path, tpl, [])
     soup = BeautifulSoup(result, "lxml")
     assert soup.find("article") is not None
+
+
+def test_replace_text_multiline_indent():
+    """多段文字：第二段起段首缩进（全角空格），<br> 分隔。"""
+    clone = BeautifulSoup('<section><p>原文</p></section>', "lxml").find("section")
+    _replace_text(clone, "第一段\n第二段\n第三段")
+    s = str(clone)
+    assert "第一段" in s
+    assert "第二段" in s
+    assert "第三段" in s
+    assert "　　第二段" in s  # 第二段缩进
+    assert "　　第三段" in s
+    assert clone.find("br") is not None
+
+
+def test_replace_text_drops_empty_shells():
+    """模板多 <p> 占位：替换后不留空 <p>（消除莫名空行）。"""
+    clone = BeautifulSoup(
+        '<section><section><p>段1</p><p>段2</p><p>段3</p></section></section>', "lxml"
+    ).find("section")
+    _replace_text(clone, "新文字")
+    ps = clone.find_all("p")
+    assert len(ps) == 1  # 只剩一个 <p>，其余空壳被删
+    assert ps[0].get_text(strip=True) == "新文字"
+
+
+def test_replace_template_merges_adjacent_body(tmp_path):
+    """相邻同 level 的普通正文块合并进一个文本框，段落缩进。"""
+    html_path = _write_sample(tmp_path)
+    tpl = _fake_template()
+    draft = [
+        {"level": 3, "text": "段落一。"},
+        {"level": 3, "text": "段落二。"},
+        {"level": 2, "text": "中间标题"},
+        {"level": 3, "text": "段落三。"},
+    ]
+    result = replace_template(html_path, tpl, draft)
+    soup = BeautifulSoup(result, "lxml")
+    blocks = [c for c in soup.find("article").find("section").children
+              if hasattr(c, "name") and c.name == "section"]
+    assert len(blocks) == 3  # 段落一二合并 → 1块；中间标题 → 1块；段落三 → 1块
+    assert "段落一" in result and "段落二" in result
+    assert "　　段落二" in result  # 第二段缩进
+    assert "段落三" in result
+
+
+def test_replace_template_keeps_special_level_separate(tmp_path):
+    """带边框的特殊层级（摘要/关键字等）即使相邻也不合并，各自独立成框。"""
+    tpl = TemplateStructure(
+        source_file="x.html",
+        levels=[LevelInfo(
+            level_id=1, sig_hash="a", font_size=14, color="rgb(0,0,0)",
+            is_heading=False, block_count=1,
+            html_sample='<section style="border: 2px solid red; padding: 5px;"><p>x</p></section>',
+            content_samples=["x"],
+            format_desc="[border=2pxsolidred;padding=5px]",
+        )],
+    )
+    html_path = tmp_path / "t.html"
+    html_path.write_text(
+        '<html><body><article><section><section style="border:1px"><p>占位</p></section></section></article></body></html>',
+        encoding="utf-8",
+    )
+    draft = [{"level": 1, "text": "摘要内容"}, {"level": 1, "text": "关键字内容"}]
+    result = replace_template(html_path, tpl, draft)
+    soup = BeautifulSoup(result, "lxml")
+    blocks = [c for c in soup.find("article").find("section").children
+              if hasattr(c, "name") and c.name == "section"]
+    assert len(blocks) == 2  # 特殊层级不合并
+    assert "摘要内容" in result and "关键字内容" in result
+
+
+def test_is_plain_body_classification():
+    """_is_plain_body：标题/带边框/带背景的都 False，纯正文 True。"""
+    heading = LevelInfo(level_id=1, sig_hash="a", font_size=24, color="x",
+                       is_heading=True, block_count=1, html_sample="", content_samples=[])
+    bordered = LevelInfo(level_id=2, sig_hash="b", font_size=14, color="x",
+                         is_heading=False, block_count=1, html_sample="", content_samples=[],
+                         format_desc="[border=2pxsolidred]")
+    bg = LevelInfo(level_id=3, sig_hash="c", font_size=14, color="x",
+                  is_heading=False, block_count=1, html_sample="", content_samples=[],
+                  format_desc="[background-color=rgb(255,255,255)]")
+    plain = LevelInfo(level_id=4, sig_hash="d", font_size=14, color="x",
+                     is_heading=False, block_count=1, html_sample="", content_samples=[],
+                     format_desc="[margin=10px]")
+    assert not _is_plain_body(heading)
+    assert not _is_plain_body(bordered)
+    assert not _is_plain_body(bg)
+    assert _is_plain_body(plain)
+
+
+def test_replace_template_fixes_page_title(tmp_path):
+    """模板 <title> 和 <h1> 文字换成新稿大标题（遗留问题）。"""
+    tpl = _fake_template()
+    html_path = tmp_path / "t.html"
+    html_path.write_text(
+        '<html><head><title>旧模板标题</title></head>'
+        '<body><main><h1>旧H1标题</h1></main>'
+        '<article><section><section style="font-size:24px"><p>占位</p></section></section></article>'
+        '</body></html>',
+        encoding="utf-8",
+    )
+    draft = [{"level": 1, "text": "新稿大标题"}]
+    result = replace_template(html_path, tpl, draft)
+    soup = BeautifulSoup(result, "lxml")
+    assert soup.find("title").string == "新稿大标题"
+    assert soup.body.find("h1").string == "新稿大标题"
+    assert "旧模板标题" not in result
+    assert "旧H1标题" not in result
