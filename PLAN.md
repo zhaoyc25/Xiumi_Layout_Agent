@@ -36,13 +36,13 @@
 - [x] TUI：开场白"按 y 开始新项目"；收材料阶段走固定引导（零 LLM）；思考中/归档位置/进度提示
 - [x] 测试：mock LLM 下 Agent 循环、工具调度、状态机流转、双格式解析
 
-### M2 固定收件箱 inbox/ + 归档 ✅（已完成，程序接管）
-- [x] `inbox/` 为客户唯一投递处，一次一个文件，格式不限（txt/doc/docx…类型判断留给 LLM）
-- [x] 固定问答引导（guide.py）："请把【…】放进 inbox 文件夹，放好后输入 y"；"没有"可跳过可选项（图片）
-- [x] 归档：按类别分目录 `workspace/<task_id>/input/{template,draft,images}/`，LLM 靠目录名区分模板与新稿
-- [x] 垃圾文件过滤：`xxx:Zone.Identifier`、`.DS_Store`、`Thumbs.db` 等自动忽略并清掉
-- [x] `xiumi clean` 指令：一键清空 inbox/ 与 workspace/ 任务文件（不经 LLM）
-- [x] 测试：引导流转、归档位置、垃圾过滤
+### M2 固定收件箱 inbox/ + 归档 ✅（已完成，已简化）
+- [x] `inbox/` 为客户唯一投递处，一次性放入模板HTML + 新文字稿（.md）
+- [x] 按扩展名自动归档：`.html`→template/、`.md`→draft/、图片→images/
+- [x] 垃圾文件过滤：`xxx:Zone.Identifier`、`.DS_Store`、`Thumbs.db` 等自动清掉
+- [x] `xiumi clean` 指令：一键清空 inbox/ 与 workspace/ 任务文件
+- [x] ~~固定问答引导（guide.py）~~：已简化为一步收集（"放文件→y→自动处理"），guide.py 保留但不再使用
+- [x] 测试：归档位置、垃圾过滤、缺件提示
 
 ### M3 材料检查工具 scan_inbox（替换桩）✅（已完成）
 - [x] 真实现：读取 `workspace/<task_id>/input/` 各目录文件清单+内容摘要，报告缺什么/什么放错了
@@ -149,3 +149,4 @@ M4 产出模板结构 + 新稿分级映射，M7 按映射机械执行克隆+替�
 | 2026-08-31 | 已知问题 | LLM 处理长文本（200行/16KB）反复超时；临时方案：要求新稿以 Markdown 提交，固定程序解析大纲，只把大纲交给 LLM 映射模板层级（输入从16KB降到~1KB） |
 | 2026-08-31 | M4 大纲方案完成 | normalize/outline.py（Markdown解析：标题全文+正文前10字预览→紧凑大纲）；level.py 改为发大纲给LLM（输入~2KB，输出~1KB）；真实文件验证通过（1.html+now.md，56块映射，113s）；97 passed / ruff clean |
 | 2026-08-31 | M7 完成 | replace/core.py（克隆模板HTML片段→清理图片→替换文字→拼装result.html）；tools.py 接线 replace_template→写 outbox/result.html；7个测试用例；真实文件端到端验证（56块，内容块0图片）；97 passed / ruff clean |
+| 2026-08-31 | TUI 简化 | 重写 tui.py：多步引导→一步收集（"放模板HTML+新稿.md到inbox→y→自动跑完→result.html"）；按扩展名归档；工具直接调用不经Agent对话；guide.py/workflow.py保留不再使用；99 passed / ruff clean |

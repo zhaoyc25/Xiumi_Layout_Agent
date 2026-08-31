@@ -1,27 +1,24 @@
-"""TUI：开场即固定引导（零 LLM），收齐材料后才交 LLM 主管开工。"""
+"""TUI：放文件 → y → 自动提取分级替换 → 给 result.html。"""
 
 from __future__ import annotations
 
 import sys
-from datetime import UTC
 from pathlib import Path
 
-from .agent import Agent
-from .guide import Guide
 from .llm import LLMClient, MockLLM
 from .tools import Session, build_default_registry
-from .workflow import Stage, WorkflowState
 
 _QUIT = {"退出", "exit", "quit"}
 _YES = {"y", "yes", "y。", "好", "好了", "放好了"}
-_NONE = {"没有", "没放", "还没", "无"}
+_NONE = {"n", "no", "没有", "没放", "还没", "无"}
 
-_ORDER = [Stage.IDLE, Stage.COLLECT_TEMPLATE, Stage.COLLECT_DRAFT,
-          Stage.CONFIRM_LEVELS, Stage.REPLACE, Stage.DELIVERED]
-
-
-def _next_stage(cur: Stage) -> Stage:
-    return _ORDER[_ORDER.index(cur) + 1]
+_TYPE_MAP = {
+    ".html": "template", ".htm": "template",
+    ".md": "draft",
+    ".png": "images", ".jpg": "images", ".jpeg": "images",
+    ".gif": "images", ".webp": "images", ".bmp": "images",
+}
+_JUNK_PATTERNS = (":Zone.Identifier", ".DS_Store", "Thumbs.db", "desktop.ini", "._")
 
 
 def run_tui(llm: LLMClient | None = None, inbox: Path | None = None) -> None:
@@ -31,8 +28,8 @@ def run_tui(llm: LLMClient | None = None, inbox: Path | None = None) -> None:
             llm = create_llm()
         except RuntimeError as e:
             print(f"[提示] {e}")
-            print("[提示] 本次以离线演示模式运行（MockLLM），只能测试流程不能真正对话。")
-            llm = MockLLM(replies=["好的，材料齐了，咱们开始！"])
+            print("[提示] 本次以离线演示模式运行（MockLLM）。")
+            llm = MockLLM(replies=["好的"])
 
     if inbox is None:
         from .config import _REPO_ROOT
@@ -40,13 +37,9 @@ def run_tui(llm: LLMClient | None = None, inbox: Path | None = None) -> None:
     inbox.mkdir(exist_ok=True)
 
     session = Session()
-    workflow = WorkflowState()
-    agent = Agent(llm, build_default_registry(session, llm), session, workflow)
-    guide = Guide(inbox)
-    guided = True
+    registry = build_default_registry(session, llm)
 
-    # 开场白：固定一句话，不调 LLM
-    print("排版小助手：按 y 开始新项目")
+    print("排版小助手：请把【模板HTML】和【新文字稿（.md）】放进 inbox 文件夹，放好后输入 y")
     for line in sys.stdin:
         text = line.strip()
         if not text:
@@ -55,86 +48,69 @@ def run_tui(llm: LLMClient | None = None, inbox: Path | None = None) -> None:
             print("再见！")
             break
 
-        # ---- 固定引导模式（收材料，零 LLM） ----
-        if guided:
-            if text.lower() in _YES:
-                if workflow.stage is Stage.IDLE:
-                    # 开始新项目：登记任务号（本地生成，不调 LLM）
-                    session.data["task_id"] = _new_task_id()
-                    workflow.advance(Stage.COLLECT_TEMPLATE)
-                    print(f"助手：{guide.begin_stage(workflow.stage)}")
-                else:
-                    done, msg = guide.confirm()
-                    print(f"助手：{msg}")
-                    if done:
-                        guided = _finish_stage(inbox, session, workflow, guide, agent)
-            elif text.lower() in _NONE:
-                if guide.skip_optional():
-                    guided = _finish_stage(inbox, session, workflow, guide, agent)
-                else:
-                    print(f"助手：好的，不着急。{guide.next_prompt()}")
-            else:
-                print(f"助手：没听清。{guide.next_prompt()}如果暂时没有，请输入：没有")
+        if text.lower() in _YES:
+            _run_pipeline(inbox, session, registry)
+        elif text.lower() in _NONE:
+            print("助手：好的，不着急。放好后输入 y")
+        else:
+            print("助手：没听清。放好文件后输入 y，或输入 退出")
+
+
+def _run_pipeline(inbox: Path, session: Session, registry) -> None:
+    """归档 → 提取模板 → 分级映射 → 生成成品。"""
+    task_id = _new_task_id()
+    session.data["task_id"] = task_id
+
+    archived = _archive_by_type(inbox, task_id)
+    if not archived["template"]:
+        print("助手：inbox 里没找到 HTML 文件。请把模板 HTML 放进 inbox，再输入 y")
+        return
+    if not archived["draft"]:
+        print("助手：inbox 里没找到文字稿（.md）。请把新文字稿放进 inbox，再输入 y")
+        return
+
+    print(f"助手：收到 {len(archived['template'])} 个模板文件、{len(archived['draft'])} 个文字稿。开始处理...\n")
+
+    print("（① 提取模板结构...）")
+    registry.get("build_template_map").run({"task_id": task_id})
+
+    print("（② 新稿分级映射...）")
+    out = registry.get("normalize_draft").run({"task_id": task_id})
+    print(f"   {out}")
+
+    print("（③ 生成成品...）")
+    out = registry.get("replace_template").run({"task_id": task_id})
+    print(f"\n助手：{out}")
+
+
+def _archive_by_type(inbox: Path, task_id: str) -> dict[str, list[str]]:
+    """按扩展名归档到 workspace/<task_id>/input/{template,draft,images}/。"""
+    from .config import _REPO_ROOT as root
+    base = root / "workspace" / task_id / "input"
+    archived: dict[str, list[str]] = {"template": [], "draft": [], "images": []}
+
+    for f in sorted(inbox.iterdir()):
+        # 清垃圾
+        if f.name.startswith(".") or any(p in f.name for p in _JUNK_PATTERNS):
+            try:
+                f.unlink()
+            except OSError:
+                pass
             continue
+        if not f.is_file():
+            continue
+        category = _TYPE_MAP.get(f.suffix.lower())
+        if not category:
+            continue
+        dest = base / category
+        dest.mkdir(parents=True, exist_ok=True)
+        f.rename(dest / f.name)
+        archived[category].append(f.name)
 
-        # ---- 普通模式：交给 LLM 主管 ----
-        print("（AI 正在思考……）")
-        print(f"助手：{agent.handle(text)}")
-
-
-def _finish_stage(inbox: Path, session: Session, workflow: WorkflowState,
-                  guide: Guide, agent: Agent) -> bool:
-    """本阶段材料收齐：归档、推进状态机；无下一阶段可引导则交棒 LLM。
-    返回是否仍处于固定引导模式。"""
-    archived = _archive(inbox, session, guide)
-    print(f"（材料已存到 {archived}）")
-    workflow.advance(_next_stage(workflow.stage))
-    opening = guide.begin_stage(workflow.stage)
-    if opening:
-        print(f"助手：{opening}")
-        return True
-    # 材料全齐：现在才让 LLM 上场检查、开工
-    print("（接下来：材料收齐，AI 开始检查处理，请稍候……）")
-    print("（AI 正在思考……）")
-    print(f"助手：{agent.handle(_kickoff_msg(session))}")
-    return False
-
-
-def _kickoff_msg(session: Session) -> str:
-    """材料收齐后给 LLM 的开工通知：告知归档结构，让它知道去哪找什么。"""
-    task_id = session.data.get("task_id", "untitled")
-    return (
-        f"（系统：所有材料已收齐并归档到 workspace/{task_id}/input/ 下，"
-        "其中 template/ 是模板材料（文字稿+网页文件），draft/ 是新文字稿，"
-        "images/ 是图片（可能没有）。请从阶段一【检查材料】开始工作。）"
-    )
+    return archived
 
 
 def _new_task_id() -> str:
     import time
-    from datetime import datetime
+    from datetime import UTC, datetime
     return f"{datetime.now(tz=UTC).date():%Y%m%d}_{int(time.time()) % 10000}"
-
-
-def _archive(inbox: Path, session: Session, guide: Guide) -> Path:
-    """把已收讫的文件从 inbox 按 类别/阶段 归档到
-    workspace/<task_id>/input/<template|draft|images>/，返回归档根目录。
-
-    guide.state.received 的 key 即类别（template_text/template_html/draft_text/images），
-    LLM 通过目录名即可区分模板与新稿，无需猜文件名。
-    """
-    task_id = session.data.get("task_id", "untitled")
-    base = inbox.parent / "workspace" / task_id / "input"
-    group_of = {
-        "template_text": "template",
-        "template_html": "template",
-        "draft_text": "draft",
-        "images": "images",
-    }
-    for key, name in guide.state.received.items():
-        dest_dir = base / group_of.get(key, "misc")
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        src = inbox / name
-        if src.exists():
-            src.rename(dest_dir / name)
-    return base
